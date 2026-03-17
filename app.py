@@ -1,4 +1,5 @@
 from flask import Flask, render_template
+import traceback
 import superenalotto_live_dashboard as superenalotto
 
 app = Flask(__name__)
@@ -38,6 +39,13 @@ def home():
                 font-size:18px;
                 line-height:1.6;
             }
+            pre {
+                white-space: pre-wrap;
+                background:#111827;
+                padding:20px;
+                border-radius:12px;
+                margin-top:20px;
+            }
         </style>
     </head>
     <body>
@@ -53,12 +61,27 @@ def home():
 
 @app.route("/superenalotto")
 def superenalotto_dashboard():
-    data = superenalotto.build_dashboard_data()
+    try:
+        data = superenalotto.build_dashboard_data()
 
-    if not data:
-        return "Nessun dato disponibile"
+        if not data:
+            return "Nessun dato disponibile"
 
-    return render_template("superenalotto.html", **data)
+        return render_template("superenalotto.html", **data)
+
+    except Exception:
+        err = traceback.format_exc()
+        return f"""
+        <html>
+        <body style="background:#0b0f19;color:white;font-family:Arial;padding:40px;">
+            <h1>Errore SuperEnalotto</h1>
+            <pre>{err}</pre>
+        </body>
+        </html>
+        """, 500
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
