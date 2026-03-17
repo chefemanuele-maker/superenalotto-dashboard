@@ -2,9 +2,35 @@ import pandas as pd
 import os
 from collections import Counter
 import random
+import requests
+import re
+from bs4 import BeautifulSoup
+from datetime import datetime
 
 DATA_FILE = os.path.join("data", "superenalotto_history.csv")
 NUMBER_RANGE = list(range(1, 91))
+
+OFFICIAL_ARCHIVE_URL = "https://www.superenalotto.it/archivio-estrazioni"
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/123.0.0.0 Safari/537.36"
+)
+
+ITALIAN_MONTHS = {
+    "gennaio": 1,
+    "febbraio": 2,
+    "marzo": 3,
+    "aprile": 4,
+    "maggio": 5,
+    "giugno": 6,
+    "luglio": 7,
+    "agosto": 8,
+    "settembre": 9,
+    "ottobre": 10,
+    "novembre": 11,
+    "dicembre": 12,
+}
 
 
 def load_history():
@@ -29,6 +55,127 @@ def load_history():
     df = df.sort_values("draw_date", ascending=False).reset_index(drop=True)
 
     return df
+
+
+def save_history(df):
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+
+    out = df.copy()
+    out["draw_date"] = pd.to_datetime(out["draw_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out = out.sort_values("draw_date", ascending=False).reset_index(drop=True)
+    out.to_csv(DATA_FILE, index=False)
+
+
+def dedupe_history(df):
+    keys = ["draw_date", "n1", "n2", "n3", "n4", "n5", "n6", "jolly", "superstar"]
+    df = df.copy()
+    df = df.drop_duplicates(subset=keys, keep="first")
+    df = df.sort_values("draw_date", ascending=False).reset_index(drop=True)
+    return df
+
+
+def parse_italian_date(text):
+    text = text.strip().lower()
+    parts = text.split()
+
+    if len(parts) != 3:
+        raise ValueError(f"Formato data non valido: {text}")
+
+    day = int(parts[0])
+    month = ITALIAN_MONTHS[parts[1]]
+    year = int(parts[2])
+
+    return datetime(year, month, day).strftime("%Y-%m-%d")
+
+
+def fetch_official_latest_draws():
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+    }
+
+    response = requests.get(OFFICIAL_ARCHIVE_URL, headers=headers, timeout=30)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    text = soup.get_text("\n", strip=True)
+
+    pattern = re.compile(
+        r"Concorso\s+N[º°o]\s*(\d+)\s+del\s+(\d{1,2}\s+[A-Za-zàèéìòù]+\s+\d{4})"
+        r"\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})"
+        r"\s+(\d{1,2})\s+(\d{1,2})\s+Dettagli",
+        re.IGNORECASE | re.DOTALL
+    )
+
+    matches = pattern.findall(text)
+
+    rows = []
+    for match in matches:
+        draw_number, draw_date, n1, n2, n3, n4, n5, n6, jolly, superstar = match
+
+        rows.append({
+            "draw_date": parse_italian_date(draw_date),
+            "n1": int(n1),
+            "n2": int(n2),
+            "n3": int(n3),
+            "n4": int(n4),
+            "n5": int(n5),
+            "n6": int(n6),
+            "jolly": int(jolly),
+            "superstar": int(superstar),
+        })
+
+    if not rows:
+        raise ValueError("Nessuna estrazione trovata nella pagina ufficiale.")
+
+    df = pd.DataFrame(rows)
+    df["draw_date"] = pd.to_datetime(df["draw_date"], errors="coerce")
+    df = df.dropna(subset=["draw_date"])
+    df = df.sort_values("draw_date", ascending=False).reset_index(drop=True)
+
+    return df
+
+
+def refresh_history():
+    local_df = load_history()
+
+    try:
+        official_df = fetch_official_latest_draws()
+
+        if local_df.empty:
+            merged = official_df.copy()
+            save_history(merged)
+            return merged, {
+                "source": "sito_ufficiale",
+                "ok": True,
+                "message": "Storico inizializzato dal sito ufficiale.",
+                "draws_added": len(merged),
+            }
+
+        before = len(local_df)
+        merged = pd.concat([local_df, official_df], ignore_index=True)
+        merged = dedupe_history(merged)
+        after = len(merged)
+
+        save_history(merged)
+
+        return merged, {
+            "source": "sito_ufficiale",
+            "ok": True,
+            "message": "Aggiornamento automatico completato.",
+            "draws_added": max(0, after - before),
+        }
+
+    except Exception as exc:
+        if not local_df.empty:
+            return local_df, {
+                "source": "cache_locale",
+                "ok": False,
+                "message": f"Sito ufficiale non disponibile, uso storico locale. ({exc})",
+                "draws_added": 0,
+            }
+
+        raise
 
 
 def extract_main_numbers(row):
@@ -277,11 +424,11 @@ def generate_single_line(pool, score_lookup, preferred_odd_even, preferred_low_h
         if low < 1 or low > 5:
             continue
 
-        score = line_score(picked, score_lookup, preferred_odd_even, preferred_low_high)
+            score = line_score(picked, score_lookup, preferred_odd_even, preferred_low_high)
 
         return {
             "numbers": picked,
-            "score": score
+            "score": line_score(picked, score_lookup, preferred_odd_even, preferred_low_high)
         }
 
     fallback = sorted(rng.sample(pool, 6))
@@ -354,7 +501,7 @@ def choose_best_line(lines):
 
 
 def build_dashboard_data():
-    df = load_history()
+    df, refresh = refresh_history()
 
     if df.empty:
         return None
@@ -390,5 +537,9 @@ def build_dashboard_data():
         "odd_even_top": odd_even_top,
         "low_high_top": low_high_top,
         "suggested_lines": suggested_lines,
-        "best_line": best_line
+        "best_line": best_line,
+        "refresh_source": refresh["source"],
+        "refresh_ok": refresh["ok"],
+        "refresh_message": refresh["message"],
+        "draws_added": refresh["draws_added"],
     }
