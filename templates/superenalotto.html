@@ -232,7 +232,7 @@
             </div>
 
             <div class="special">
-                <span class="label">SuperStar:</span> {{ superstar }}
+                <span class="label">SuperStar ultima estrazione:</span> {{ superstar }}
             </div>
 
             <div class="info-box">
@@ -279,12 +279,31 @@
             </div>
 
             <div class="card">
-                <h2>Indicazione rapida</h2>
-                <div class="note">
-                    <p><span class="label">Uso principale:</span> la combinazione mostrata nel box <strong>Best Line</strong> è la linea principale da considerare.</p>
-                    <p><span class="label">Linee extra:</span> se vuoi usare più combinazioni, puoi aggiungere anche le linee suggerite sotto.</p>
-                    <p><span class="label">Modalità:</span> safe = più conservativa, balanced = più equilibrata, aggressive = più aperta a numeri fuori dal nucleo forte.</p>
+                <h2>SuperStar consigliato</h2>
+
+                {% if best_superstar %}
+                <div class="best-line-box">
+                    <div class="numbers">
+                        <div class="ball hero-ball">{{ best_superstar.number }}</div>
+                    </div>
+
+                    <div class="score-box">
+                        <span class="label">Score:</span> {{ best_superstar.score }}
+                    </div>
+
+                    <div class="score-box">
+                        <span class="label">Frequenza:</span> {{ best_superstar.frequency }}
+                    </div>
+
+                    <div class="score-box">
+                        <span class="label">Ritardo:</span> {{ best_superstar.delay }}
+                    </div>
+
+                    <div class="note">
+                        Questo è il SuperStar suggerito dal modello attuale in base a frequenza storica e ritardo.
+                    </div>
                 </div>
+                {% endif %}
             </div>
         </div>
 
@@ -320,6 +339,48 @@
                     </thead>
                     <tbody>
                         {% for item in delayed_numbers %}
+                        <tr>
+                            <td>{{ item.number }}</td>
+                            <td>{{ item.delay }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="stats-grid" style="margin-top: 25px;">
+            <div class="small-card">
+                <h3>Top SuperStar più frequenti</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Numero</th>
+                            <th>Uscite</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in superstar_top %}
+                        <tr>
+                            <td>{{ item.number }}</td>
+                            <td>{{ item.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="small-card">
+                <h3>Top SuperStar più ritardatari</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Numero</th>
+                            <th>Ritardo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in superstar_delayed %}
                         <tr>
                             <td>{{ item.number }}</td>
                             <td>{{ item.delay }}</td>
