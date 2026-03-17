@@ -52,7 +52,7 @@ def home():
         <div class="box">
             <h1>Dashboard SuperEnalotto</h1>
             <p>Server attivo correttamente.</p>
-            <p>Apri la dashboard completa per visualizzare ultima estrazione, statistiche, best line e linee suggerite.</p>
+            <p>Apri la dashboard completa per visualizzare ultima estrazione, statistiche, best line, linee suggerite e SuperStar consigliato.</p>
             <p><a href="/superenalotto">Apri Dashboard SuperEnalotto</a></p>
         </div>
     </body>
@@ -79,9 +79,6 @@ def superenalotto_dashboard():
         </body>
         </html>
         """, 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
