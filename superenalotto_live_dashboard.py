@@ -77,6 +77,84 @@ def get_most_delayed_numbers(df, top_n=10):
     return delays[:top_n]
 
 
+def get_superstar_frequency(df, top_n=10):
+    counts = Counter()
+
+    for _, row in df.iterrows():
+        superstar = int(row["superstar"])
+        counts[superstar] += 1
+
+    top_superstar = counts.most_common(top_n)
+    return [{"number": num, "count": count} for num, count in top_superstar]
+
+
+def get_superstar_delays(df, top_n=10):
+    delays = []
+
+    for number in NUMBER_RANGE:
+        delay = None
+
+        for idx, row in df.iterrows():
+            superstar = int(row["superstar"])
+
+            if number == superstar:
+                delay = idx
+                break
+
+        if delay is None:
+            delay = len(df)
+
+        delays.append({
+            "number": number,
+            "delay": delay
+        })
+
+    delays = sorted(delays, key=lambda x: x["delay"], reverse=True)
+    return delays[:top_n]
+
+
+def choose_best_superstar(df):
+    freq_counter = Counter()
+
+    for _, row in df.iterrows():
+        superstar = int(row["superstar"])
+        freq_counter[superstar] += 1
+
+    delay_map = {}
+    for number in NUMBER_RANGE:
+        delay = None
+        for idx, row in df.iterrows():
+            superstar = int(row["superstar"])
+            if number == superstar:
+                delay = idx
+                break
+        if delay is None:
+            delay = len(df)
+        delay_map[number] = delay
+
+    max_freq = max(freq_counter.values()) if freq_counter else 1
+    max_delay = max(delay_map.values()) if delay_map else 1
+
+    scores = []
+    for number in NUMBER_RANGE:
+        frequency = freq_counter[number]
+        delay = delay_map[number]
+
+        freq_score = (frequency / max_freq) * 100
+        delay_score = (delay / max_delay) * 100 if max_delay > 0 else 0
+        score = (freq_score * 0.65) + (delay_score * 0.35)
+
+        scores.append({
+            "number": number,
+            "frequency": frequency,
+            "delay": delay,
+            "score": round(score, 2)
+        })
+
+    scores = sorted(scores, key=lambda x: x["score"], reverse=True)
+    return scores[0] if scores else None
+
+
 def build_number_scores(df):
     freq_counter = Counter()
 
@@ -289,6 +367,11 @@ def build_dashboard_data():
 
     frequent_numbers = get_most_frequent_numbers(df)
     delayed_numbers = get_most_delayed_numbers(df)
+
+    superstar_top = get_superstar_frequency(df)
+    superstar_delayed = get_superstar_delays(df)
+    best_superstar = choose_best_superstar(df)
+
     odd_even_top, low_high_top = build_pattern_stats(df)
     suggested_lines = generate_suggested_lines(df)
     best_line = choose_best_line(suggested_lines)
@@ -301,6 +384,9 @@ def build_dashboard_data():
         "total_draws": len(df),
         "frequent_numbers": frequent_numbers,
         "delayed_numbers": delayed_numbers,
+        "superstar_top": superstar_top,
+        "superstar_delayed": superstar_delayed,
+        "best_superstar": best_superstar,
         "odd_even_top": odd_even_top,
         "low_high_top": low_high_top,
         "suggested_lines": suggested_lines,
