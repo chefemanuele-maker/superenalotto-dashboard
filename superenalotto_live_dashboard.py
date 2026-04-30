@@ -5,7 +5,7 @@ import random
 import requests
 import re
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, date
 
 DATA_FILE = os.path.join("data", "superenalotto_history.csv")
 NUMBER_RANGE = list(range(1, 91))
@@ -33,6 +33,25 @@ ITALIAN_MONTHS = {
 }
 
 
+def validate_draw_row(row):
+    try:
+        nums = extract_main_numbers(row)
+        jolly = int(row["jolly"])
+        superstar = int(row["superstar"])
+    except Exception:
+        return False
+
+    if len(nums) != 6 or len(set(nums)) != 6:
+        return False
+    if not all(1 <= n <= 90 for n in nums):
+        return False
+    if not 1 <= jolly <= 90:
+        return False
+    if not 1 <= superstar <= 90:
+        return False
+    return True
+
+
 def load_history():
     if not os.path.exists(DATA_FILE):
         return pd.DataFrame()
@@ -52,6 +71,7 @@ def load_history():
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df = df.dropna(subset=numeric_cols)
+    df = df[df.apply(lambda row: validate_draw_row(row), axis=1)]
     df = df.sort_values("draw_date", ascending=False).reset_index(drop=True)
 
     return df
@@ -67,9 +87,11 @@ def save_history(df):
 
 
 def dedupe_history(df):
-    keys = ["draw_date", "n1", "n2", "n3", "n4", "n5", "n6", "jolly", "superstar"]
     df = df.copy()
-    df = df.drop_duplicates(subset=keys, keep="first")
+    df = df.sort_values("draw_date", ascending=False)
+    # A draw date should appear once. Keeping by date also repairs cases where
+    # an older cached row is later refreshed with cleaner official data.
+    df = df.drop_duplicates(subset=["draw_date"], keep="first")
     df = df.sort_values("draw_date", ascending=False).reset_index(drop=True)
     return df
 
@@ -114,6 +136,7 @@ def fetch_official_latest_draws():
         draw_number, draw_date, n1, n2, n3, n4, n5, n6, jolly, superstar = match
 
         rows.append({
+            "draw_number": int(draw_number),
             "draw_date": parse_italian_date(draw_date),
             "n1": int(n1),
             "n2": int(n2),
@@ -150,6 +173,7 @@ def refresh_history():
                 "ok": True,
                 "message": "Storico inizializzato dal sito ufficiale.",
                 "draws_added": len(merged),
+                "official_rows": len(official_df),
             }
 
         before = len(local_df)
@@ -164,6 +188,7 @@ def refresh_history():
             "ok": True,
             "message": "Aggiornamento automatico completato.",
             "draws_added": max(0, after - before),
+            "official_rows": len(official_df),
         }
 
     except Exception as exc:
@@ -173,6 +198,7 @@ def refresh_history():
                 "ok": False,
                 "message": f"Sito ufficiale non disponibile, uso storico locale. ({exc})",
                 "draws_added": 0,
+                "official_rows": 0,
             }
 
         raise
@@ -366,6 +392,48 @@ def build_pattern_stats(df):
     return odd_even_top, low_high_top
 
 
+def build_quality_report(df, refresh):
+    if df.empty:
+        return {
+            "ok": False,
+            "title": "DATA QUALITY WARNING",
+            "notes": ["Storico vuoto."],
+        }
+
+    notes = []
+    duplicate_dates = int(df["draw_date"].duplicated().sum())
+    invalid_rows = int((~df.apply(lambda row: validate_draw_row(row), axis=1)).sum())
+    latest_date = pd.to_datetime(df.iloc[0]["draw_date"], errors="coerce")
+    days_since_latest = None
+    if not pd.isna(latest_date):
+        days_since_latest = (pd.Timestamp(date.today()) - latest_date.normalize()).days
+
+    if duplicate_dates:
+        notes.append(f"Trovate {duplicate_dates} date duplicate nello storico.")
+    if invalid_rows:
+        notes.append(f"Trovate {invalid_rows} righe con numeri non validi.")
+    if days_since_latest is not None and days_since_latest > 7:
+        notes.append(f"Ultima estrazione vecchia di {days_since_latest} giorni: controllare refresh.")
+    if not refresh.get("ok"):
+        notes.append("Refresh live non riuscito: dashboard in modalità cache locale.")
+    if refresh.get("official_rows", 0) and refresh.get("official_rows", 0) < 10:
+        notes.append("La pagina ufficiale ha restituito poche estrazioni recenti: controllare parser/fonte.")
+
+    if not notes:
+        notes.append("Storico valido: numeri 1-90, nessuna data duplicata, refresh recente disponibile.")
+
+    ok = duplicate_dates == 0 and invalid_rows == 0 and refresh.get("ok", False)
+    return {
+        "ok": ok,
+        "title": "DATA QUALITY OK" if ok else "DATA QUALITY WARNING",
+        "notes": notes,
+        "duplicate_dates": duplicate_dates,
+        "invalid_rows": invalid_rows,
+        "days_since_latest": days_since_latest,
+        "official_rows": refresh.get("official_rows", 0),
+    }
+
+
 def line_score(numbers, score_lookup, preferred_odd_even, preferred_low_high):
     base_score = sum(score_lookup.get(n, 0) for n in numbers)
 
@@ -423,8 +491,6 @@ def generate_single_line(pool, score_lookup, preferred_odd_even, preferred_low_h
 
         if low < 1 or low > 5:
             continue
-
-            score = line_score(picked, score_lookup, preferred_odd_even, preferred_low_high)
 
         return {
             "numbers": picked,
@@ -522,6 +588,7 @@ def build_dashboard_data():
     odd_even_top, low_high_top = build_pattern_stats(df)
     suggested_lines = generate_suggested_lines(df)
     best_line = choose_best_line(suggested_lines)
+    quality = build_quality_report(df, refresh)
 
     return {
         "date": latest["draw_date"].strftime("%Y-%m-%d"),
@@ -542,4 +609,6 @@ def build_dashboard_data():
         "refresh_ok": refresh["ok"],
         "refresh_message": refresh["message"],
         "draws_added": refresh["draws_added"],
+        "official_rows": refresh.get("official_rows", 0),
+        "quality": quality,
     }

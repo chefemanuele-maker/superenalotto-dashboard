@@ -3,469 +3,241 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperEnalotto Dashboard</title>
+    <title>SuperEnalotto // Cipher Lab</title>
     <style>
+        :root {
+            --bg-0:#020204;
+            --bg-1:#06100c;
+            --panel:#07100d;
+            --text:#dffff4;
+            --muted:#7eb7a6;
+            --neon:#00ff9c;
+            --cyan:#00d8ff;
+            --gold:#ffd54a;
+            --pink:#ff2bd6;
+            --red:#ff3864;
+            --shadow:0 0 0 1px rgba(0,255,156,.16), 0 0 34px rgba(0,255,156,.15), inset 0 0 0 1px rgba(255,255,255,.035);
+        }
+        * { box-sizing:border-box; }
         body {
-            background: #0b0f19;
-            color: white;
-            font-family: Arial, sans-serif;
-            padding: 40px;
-            margin: 0;
+            margin:0;
+            padding:26px;
+            color:var(--text);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            background:
+                radial-gradient(circle at 15% 6%, rgba(0,255,156,.16), transparent 24%),
+                radial-gradient(circle at 86% 4%, rgba(255,43,214,.11), transparent 24%),
+                radial-gradient(circle at 54% 94%, rgba(0,216,255,.10), transparent 25%),
+                linear-gradient(180deg, var(--bg-0), var(--bg-1) 50%, #010302);
+            min-height:100vh;
+            overflow-x:hidden;
         }
-
-        .container {
-            max-width: 1300px;
-            margin: 0 auto;
+        body::before {
+            content:"";
+            position:fixed;
+            inset:0;
+            pointer-events:none;
+            background:
+                linear-gradient(rgba(0,255,156,.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,216,255,.026) 1px, transparent 1px);
+            background-size:36px 36px;
+            mask-image:radial-gradient(circle at center, black 0 58%, transparent 88%);
         }
-
-        .card {
-            background: #111827;
-            border-radius: 16px;
-            padding: 25px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.3);
-            margin-bottom: 25px;
+        body::after {
+            content:"";
+            position:fixed;
+            inset:0;
+            pointer-events:none;
+            background:repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px);
+            mix-blend-mode:overlay;
+            opacity:.18;
         }
-
-        .small-card {
-            background: #0f172a;
-            border-radius: 14px;
-            padding: 20px;
+        .container { max-width:1480px; margin:0 auto; position:relative; z-index:1; }
+        .grid { display:grid; gap:18px; }
+        .top-grid { grid-template-columns:1.25fr .75fr; margin-top:18px; }
+        .stats-grid { grid-template-columns:1fr 1fr; margin-top:18px; }
+        .three-grid { grid-template-columns:1fr 1fr 1fr; margin-top:18px; }
+        .card, .small-card {
+            position:relative;
+            overflow:hidden;
+            background:
+                linear-gradient(135deg, rgba(0,255,156,.075), transparent 22%),
+                linear-gradient(180deg, rgba(7,16,13,.92), rgba(1,6,5,.96));
+            border:1px solid rgba(0,255,156,.20);
+            border-radius:24px;
+            padding:20px;
+            box-shadow:var(--shadow);
+            backdrop-filter:blur(10px);
         }
-
+        .card::before, .small-card::before {
+            content:"";
+            position:absolute;
+            inset:0;
+            pointer-events:none;
+            background:linear-gradient(90deg, transparent, rgba(0,255,156,.10), transparent);
+            transform:translateX(-120%);
+            animation:sweep 7s linear infinite;
+        }
+        .card::after, .small-card::after {
+            content:"";
+            position:absolute;
+            top:0; left:18px; right:18px;
+            height:1px;
+            background:linear-gradient(90deg, transparent, rgba(0,255,156,.85), rgba(0,216,255,.75), transparent);
+        }
+        @keyframes sweep { 0%,55% { transform:translateX(-120%); } 70%,100% { transform:translateX(120%); } }
+        .badge {
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            padding:8px 12px;
+            border-radius:999px;
+            border:1px solid rgba(0,255,156,.34);
+            background:rgba(0,255,156,.075);
+            color:var(--neon);
+            font-size:12px;
+            font-weight:900;
+            text-transform:uppercase;
+            letter-spacing:.12em;
+            box-shadow:0 0 18px rgba(0,255,156,.18);
+        }
+        .badge::before { content:"●"; color:var(--neon); text-shadow:0 0 9px var(--neon); animation:pulse 1.4s infinite; }
+        @keyframes pulse { 0%,100% { opacity:.35; } 50% { opacity:1; } }
         h1 {
-            margin-top: 0;
-            color: #4dd0ff;
+            margin:10px 0 8px;
+            font-size:clamp(34px, 5vw, 64px);
+            line-height:.92;
+            letter-spacing:-2px;
+            color:#eafff8;
+            text-shadow:0 0 8px rgba(0,255,156,.72), 0 0 28px rgba(0,216,255,.28);
         }
-
-        h2 {
-            margin-top: 0;
-            color: #ffffff;
-        }
-
-        h3 {
-            color: #4dd0ff;
-            margin-top: 0;
-        }
-
-        .numbers {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin: 20px 0;
-        }
-
+        h1::before { content:"> "; color:var(--neon); }
+        h2, h3 { margin:0 0 13px; color:#ffffff; letter-spacing:-.5px; text-shadow:0 0 12px rgba(0,255,156,.25); }
+        h2::before, h3::before { content:"// "; color:var(--cyan); }
+        .sub, .note, .date, .info-box, .score-box { color:var(--muted); line-height:1.6; }
+        .label { color:var(--cyan); font-weight:900; }
+        .numbers { display:flex; gap:10px; flex-wrap:wrap; margin:18px 0; }
         .ball {
-            width: 55px;
-            height: 55px;
-            border-radius: 50%;
-            background: white;
-            color: #111;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 20px;
+            width:54px;
+            height:54px;
+            border-radius:15px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-weight:1000;
+            font-size:19px;
+            transform:skewX(-4deg);
+            border:1px solid rgba(255,255,255,.12);
+            background:linear-gradient(180deg,#eafff8,#8fffd2);
+            color:#04100b;
+            box-shadow:0 0 18px rgba(0,255,156,.25);
         }
-
-        .hero-ball {
-            width: 62px;
-            height: 62px;
-            font-size: 22px;
-            background: #4dd0ff;
-            color: #081018;
-        }
-
-        .special {
-            margin-top: 20px;
-            font-size: 20px;
-        }
-
-        .label {
-            color: #4dd0ff;
-            font-weight: bold;
-        }
-
-        .date {
-            font-size: 18px;
-            margin-bottom: 20px;
-            color: #d1d5db;
-        }
-
-        .info-box {
-            font-size: 18px;
-            margin-top: 10px;
-            color: #d1d5db;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px;
-        }
-
-        .top-grid {
-            display: grid;
-            grid-template-columns: 1.2fr 0.8fr;
-            gap: 25px;
-            margin-bottom: 25px;
-        }
-
-        .three-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 25px;
-            margin-top: 25px;
-        }
-
-        .suggested-card {
-            margin-top: 25px;
-        }
-
-        .best-line-box {
-            background: #0f172a;
-            border: 1px solid #253047;
-            border-radius: 14px;
-            padding: 20px;
-        }
-
-        .score-box {
-            margin-top: 20px;
-            font-size: 18px;
-            color: #d1d5db;
-        }
-
-        .note {
-            color: #cbd5e1;
-            line-height: 1.6;
-            margin-top: 15px;
-        }
-
-        .mode-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 999px;
-            font-size: 14px;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .mode-safe {
-            background: #123524;
-            color: #7CFFB2;
-        }
-
-        .mode-balanced {
-            background: #123047;
-            color: #7dd3fc;
-        }
-
-        .mode-aggressive {
-            background: #3d1b1b;
-            color: #fca5a5;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #253047;
-        }
-
-        th {
-            color: #4dd0ff;
-            font-size: 15px;
-        }
-
-        td {
-            color: #ffffff;
-        }
-
-        @media (max-width: 1000px) {
-            .stats-grid,
-            .top-grid,
-            .three-grid {
-                grid-template-columns: 1fr;
-            }
-
-            body {
-                padding: 20px;
-            }
-
-            .ball {
-                width: 48px;
-                height: 48px;
-                font-size: 18px;
-            }
-
-            .hero-ball {
-                width: 54px;
-                height: 54px;
-                font-size: 19px;
-            }
-        }
+        .hero-ball { width:62px; height:62px; font-size:21px; border-radius:18px; box-shadow:0 0 14px rgba(0,255,156,.46), 0 0 42px rgba(0,216,255,.18); }
+        .special { margin-top:10px; font-size:17px; color:#dffff4; }
+        .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:18px; }
+        .kpi { background:rgba(0,255,156,.045); border:1px solid rgba(0,255,156,.16); border-radius:17px; padding:13px; }
+        .kpi .k { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.11em; }
+        .kpi .v { margin-top:6px; font-size:19px; font-weight:900; color:#f3fffb; }
+        .best-line-box { background:#010604; border:1px solid rgba(0,255,156,.28); border-radius:17px; padding:17px; box-shadow:inset 0 0 24px rgba(0,255,156,.05); }
+        .mode-badge { display:inline-flex; padding:7px 11px; border-radius:999px; font-size:12px; font-weight:900; letter-spacing:.10em; border:1px solid currentColor; margin-top:8px; }
+        .mode-safe { background:rgba(11,207,122,.14); color:#8dffd0; }
+        .mode-balanced { background:rgba(0,216,255,.14); color:#9befff; }
+        .mode-aggressive { background:rgba(255,56,100,.14); color:#ff9ab0; }
+        .alert { margin-top:14px; border-radius:17px; padding:12px 14px; line-height:1.45; }
+        .alert.ok { border:1px solid rgba(11,207,122,.32); background:rgba(11,207,122,.09); color:#c8ffea; }
+        .alert.warn { border:1px solid rgba(255,213,74,.42); background:rgba(255,213,74,.11); color:#ffeaa0; }
+        .alert ul { margin:8px 0 0 18px; padding:0; }
+        table { width:100%; border-collapse:collapse; margin-top:12px; }
+        th, td { padding:12px 10px; text-align:left; border-bottom:1px solid rgba(0,255,156,.09); }
+        th { color:#9dffe1; font-size:11px; letter-spacing:.12em; text-transform:uppercase; background:rgba(0,255,156,.04); }
+        td { color:#fff; }
+        tr:hover td { background:rgba(0,255,156,.045); }
+        .footer { margin-top:18px; font-size:13px; color:var(--muted); }
+        @media (max-width:1000px) { .stats-grid, .top-grid, .three-grid, .kpi-grid { grid-template-columns:1fr; } body { padding:14px; } }
     </style>
 </head>
 <body>
     <div class="container">
-
         <div class="card">
-            <h1>SuperEnalotto Dashboard</h1>
-            <h2>Ultima estrazione</h2>
+            <div class="badge">SuperEnalotto cipher lab</div>
+            <h1>SUPERENALOTTO // CIPHER ENGINE</h1>
+            <div class="sub">Dashboard neon per analisi live: refresh ufficiale, controllo qualità dati, frequenze, ritardi, pattern, SuperStar e linee safe / balanced / aggressive.</div>
 
-            <div class="date">
-                <span class="label">Data:</span> {{ date }}
+            <div class="kpi-grid">
+                <div class="kpi"><div class="k">Ultima estrazione</div><div class="v">{{ date }}</div></div>
+                <div class="kpi"><div class="k">Draw archiviate</div><div class="v">{{ total_draws }}</div></div>
+                <div class="kpi"><div class="k">Fonte refresh</div><div class="v">{{ refresh_source }}</div></div>
+                <div class="kpi"><div class="k">Nuove righe</div><div class="v">{{ draws_added }}</div></div>
             </div>
 
+            <h2 style="margin-top:22px;">Ultima estrazione</h2>
             <div class="numbers">
-                {% for n in numbers %}
-                    <div class="ball">{{ n }}</div>
-                {% endfor %}
+                {% for n in numbers %}<div class="ball">{{ n }}</div>{% endfor %}
             </div>
-
-            <div class="special">
-                <span class="label">Jolly:</span> {{ jolly }}
-            </div>
-
-            <div class="special">
-                <span class="label">SuperStar ultima estrazione:</span> {{ superstar }}
-            </div>
-
-            <div class="info-box">
-                <span class="label">Totale estrazioni archiviate:</span> {{ total_draws }}
+            <div class="special"><span class="label">Jolly:</span> {{ jolly }}</div>
+            <div class="special"><span class="label">SuperStar:</span> {{ superstar }}</div>
+            <div class="alert {% if quality.ok %}ok{% else %}warn{% endif %}">
+                <b>{{ quality.title }}</b>
+                <ul>{% for note in quality.notes %}<li>{{ note }}</li>{% endfor %}</ul>
             </div>
         </div>
 
-        <div class="top-grid">
+        <div class="grid top-grid">
             <div class="card">
-                <h2>Best Line</h2>
-
+                <h2>Target line per prossima estrazione</h2>
                 {% if best_line %}
                 <div class="best-line-box">
-                    <div class="numbers">
-                        {% for n in best_line.numbers %}
-                            <div class="ball hero-ball">{{ n }}</div>
-                        {% endfor %}
+                    <div class="numbers">{% for n in best_line.numbers %}<div class="ball hero-ball">{{ n }}</div>{% endfor %}</div>
+                    <div class="score-box"><span class="label">Nome:</span> {{ best_line.name }}</div>
+                    <div class="score-box"><span class="label">Score:</span> {{ best_line.score }}</div>
+                    <div class="score-box"><span class="label">Modalità:</span>
+                        {% if best_line.mode == "safe" %}<span class="mode-badge mode-safe">SAFE</span>
+                        {% elif best_line.mode == "balanced" %}<span class="mode-badge mode-balanced">BALANCED</span>
+                        {% else %}<span class="mode-badge mode-aggressive">AGGRESSIVE</span>{% endif %}
                     </div>
-
-                    <div class="score-box">
-                        <span class="label">Nome:</span> {{ best_line.name }}
-                    </div>
-
-                    <div class="score-box">
-                        <span class="label">Score:</span> {{ best_line.score }}
-                    </div>
-
-                    <div class="score-box">
-                        <span class="label">Modalità:</span>
-                        {% if best_line.mode == "safe" %}
-                            <span class="mode-badge mode-safe">SAFE</span>
-                        {% elif best_line.mode == "balanced" %}
-                            <span class="mode-badge mode-balanced">BALANCED</span>
-                        {% else %}
-                            <span class="mode-badge mode-aggressive">AGGRESSIVE</span>
-                        {% endif %}
-                    </div>
-
-                    <div class="note">
-                        Questa è la linea scelta come migliore dal modello attuale, con priorità alle linee balanced, poi safe, poi aggressive.
-                    </div>
+                    <div class="note">Scelta con priorità alle linee balanced, poi safe, poi aggressive. Serve per organizzare la giocata, non per prevedere il risultato.</div>
                 </div>
                 {% endif %}
             </div>
 
             <div class="card">
                 <h2>SuperStar consigliato</h2>
-
                 {% if best_superstar %}
                 <div class="best-line-box">
-                    <div class="numbers">
-                        <div class="ball hero-ball">{{ best_superstar.number }}</div>
-                    </div>
-
-                    <div class="score-box">
-                        <span class="label">Score:</span> {{ best_superstar.score }}
-                    </div>
-
-                    <div class="score-box">
-                        <span class="label">Frequenza:</span> {{ best_superstar.frequency }}
-                    </div>
-
-                    <div class="score-box">
-                        <span class="label">Ritardo:</span> {{ best_superstar.delay }}
-                    </div>
-
-                    <div class="note">
-                        Questo è il SuperStar suggerito dal modello attuale in base a frequenza storica e ritardo.
-                    </div>
+                    <div class="numbers"><div class="ball hero-ball">{{ best_superstar.number }}</div></div>
+                    <div class="score-box"><span class="label">Score:</span> {{ best_superstar.score }}</div>
+                    <div class="score-box"><span class="label">Frequenza:</span> {{ best_superstar.frequency }}</div>
+                    <div class="score-box"><span class="label">Ritardo:</span> {{ best_superstar.delay }}</div>
+                    <div class="note">Calcolato da frequenza storica e ritardo. Il ritardo non rende il numero “dovuto”: è solo un segnale statistico descrittivo.</div>
                 </div>
                 {% endif %}
             </div>
         </div>
 
-        <div class="stats-grid">
-            <div class="small-card">
-                <h3>Top 10 numeri più frequenti</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Numero</th>
-                            <th>Uscite</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in frequent_numbers %}
-                        <tr>
-                            <td>{{ item.number }}</td>
-                            <td>{{ item.count }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="small-card">
-                <h3>Top 10 numeri più ritardatari</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Numero</th>
-                            <th>Ritardo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in delayed_numbers %}
-                        <tr>
-                            <td>{{ item.number }}</td>
-                            <td>{{ item.delay }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="grid stats-grid">
+            <div class="small-card"><h3>Top 10 numeri più frequenti</h3><table><thead><tr><th>Numero</th><th>Uscite</th></tr></thead><tbody>{% for item in frequent_numbers %}<tr><td>{{ item.number }}</td><td>{{ item.count }}</td></tr>{% endfor %}</tbody></table></div>
+            <div class="small-card"><h3>Top 10 numeri più ritardatari</h3><table><thead><tr><th>Numero</th><th>Ritardo</th></tr></thead><tbody>{% for item in delayed_numbers %}<tr><td>{{ item.number }}</td><td>{{ item.delay }}</td></tr>{% endfor %}</tbody></table></div>
         </div>
 
-        <div class="stats-grid" style="margin-top: 25px;">
-            <div class="small-card">
-                <h3>Top SuperStar più frequenti</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Numero</th>
-                            <th>Uscite</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in superstar_top %}
-                        <tr>
-                            <td>{{ item.number }}</td>
-                            <td>{{ item.count }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="small-card">
-                <h3>Top SuperStar più ritardatari</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Numero</th>
-                            <th>Ritardo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in superstar_delayed %}
-                        <tr>
-                            <td>{{ item.number }}</td>
-                            <td>{{ item.delay }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="grid stats-grid">
+            <div class="small-card"><h3>Top SuperStar più frequenti</h3><table><thead><tr><th>Numero</th><th>Uscite</th></tr></thead><tbody>{% for item in superstar_top %}<tr><td>{{ item.number }}</td><td>{{ item.count }}</td></tr>{% endfor %}</tbody></table></div>
+            <div class="small-card"><h3>Top SuperStar più ritardatari</h3><table><thead><tr><th>Numero</th><th>Ritardo</th></tr></thead><tbody>{% for item in superstar_delayed %}<tr><td>{{ item.number }}</td><td>{{ item.delay }}</td></tr>{% endfor %}</tbody></table></div>
         </div>
 
-        <div class="three-grid">
-            <div class="small-card">
-                <h3>Pattern Odd / Even</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Pattern</th>
-                            <th>Count</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in odd_even_top %}
-                        <tr>
-                            <td>{{ item.pattern }}</td>
-                            <td>{{ item.count }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="small-card">
-                <h3>Pattern Low / High</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Pattern</th>
-                            <th>Count</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in low_high_top %}
-                        <tr>
-                            <td>{{ item.pattern }}</td>
-                            <td>{{ item.count }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="small-card">
-                <h3>Riassunto motore</h3>
-                <div class="note">
-                    <p><span class="label">Base score:</span> frequenza + ritardo.</p>
-                    <p><span class="label">Bonus:</span> pattern storici più comuni e somma numeri più equilibrata.</p>
-                    <p><span class="label">Penalità:</span> troppi consecutivi e troppi numeri con stessa cifra finale.</p>
-                </div>
-            </div>
+        <div class="grid three-grid">
+            <div class="small-card"><h3>Pattern Odd / Even</h3><table><thead><tr><th>Pattern</th><th>Count</th></tr></thead><tbody>{% for item in odd_even_top %}<tr><td>{{ item.pattern }}</td><td>{{ item.count }}</td></tr>{% endfor %}</tbody></table></div>
+            <div class="small-card"><h3>Pattern Low / High</h3><table><thead><tr><th>Pattern</th><th>Count</th></tr></thead><tbody>{% for item in low_high_top %}<tr><td>{{ item.pattern }}</td><td>{{ item.count }}</td></tr>{% endfor %}</tbody></table></div>
+            <div class="small-card"><h3>Riassunto motore</h3><div class="note"><p><span class="label">Base:</span> frequenza + ritardo normalizzati.</p><p><span class="label">Bonus:</span> pattern storici comuni e somma equilibrata.</p><p><span class="label">Penalità:</span> consecutivi e troppe cifre finali uguali.</p></div></div>
         </div>
 
-        <div class="card suggested-card">
+        <div class="card" style="margin-top:18px;">
             <h2>Linee suggerite</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Linea</th>
-                        <th>Modalità</th>
-                        <th>Numeri</th>
-                        <th>Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for line in suggested_lines %}
-                    <tr>
-                        <td>{{ line.name }}</td>
-                        <td>{{ line.mode }}</td>
-                        <td>{{ line.numbers|join(', ') }}</td>
-                        <td>{{ line.score }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <table><thead><tr><th>Linea</th><th>Modalità</th><th>Numeri</th><th>Score</th></tr></thead><tbody>{% for line in suggested_lines %}<tr><td>{{ line.name }}</td><td>{{ line.mode }}</td><td>{{ line.numbers|join(', ') }}</td><td>{{ line.score }}</td></tr>{% endfor %}</tbody></table>
         </div>
 
+        <div class="card footer">
+            <strong>Responsible play:</strong> questa dashboard aiuta ad analizzare e organizzare le giocate, ma il SuperEnalotto è casuale. Non può prevedere il 6 né migliorare matematicamente la probabilità di jackpot.
+        </div>
     </div>
 </body>
 </html>
