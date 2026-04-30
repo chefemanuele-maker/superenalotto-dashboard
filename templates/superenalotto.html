@@ -166,8 +166,8 @@
             <div class="kpi-grid">
                 <div class="kpi"><div class="k">Ultima estrazione</div><div class="v">{{ date }}</div></div>
                 <div class="kpi"><div class="k">Draw archiviate</div><div class="v">{{ total_draws }}</div></div>
+                <div class="kpi"><div class="k">Montepremi stimato</div><div class="v">{{ jackpot.display }}</div></div>
                 <div class="kpi"><div class="k">Fonte refresh</div><div class="v">{{ refresh_source }}</div></div>
-                <div class="kpi"><div class="k">Nuove righe</div><div class="v">{{ draws_added }}</div></div>
             </div>
 
             <h2 style="margin-top:22px;">Ultima estrazione</h2>
@@ -179,6 +179,10 @@
             <div class="alert {% if quality.ok %}ok{% else %}warn{% endif %}">
                 <b>{{ quality.title }}</b>
                 <ul>{% for note in quality.notes %}<li>{{ note }}</li>{% endfor %}</ul>
+            </div>
+            <div class="note" style="margin-top:10px;">
+                <span class="label">Montepremi:</span> {{ jackpot.display }}
+                <span style="color:var(--muted);">(fonte: {{ jackpot.source }})</span>
             </div>
         </div>
 

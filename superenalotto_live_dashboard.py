@@ -11,6 +11,7 @@ DATA_FILE = os.path.join("data", "superenalotto_history.csv")
 NUMBER_RANGE = list(range(1, 91))
 
 OFFICIAL_ARCHIVE_URL = "https://www.superenalotto.it/archivio-estrazioni"
+JACKPOT_INFO_URL = "https://www.superenalotto.net/en/"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -157,6 +158,51 @@ def fetch_official_latest_draws():
     df = df.sort_values("draw_date", ascending=False).reset_index(drop=True)
 
     return df
+
+
+def fetch_estimated_jackpot():
+    """Fetch the next estimated jackpot from a public info page.
+
+    The official SuperEnalotto site renders the jackpot through a protected JS
+    API, which may return 403 from server environments. This public page exposes
+    a readable jackpot label, so we use it as a display-only source.
+    """
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "en-GB,en;q=0.9,it;q=0.8",
+    }
+    response = requests.get(JACKPOT_INFO_URL, headers=headers, timeout=20)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    text = soup.get_text("\n", strip=True)
+    compact = re.sub(r"\s+", " ", text)
+
+    match = re.search(
+        r"Tonight['’]s\s+Estimated\s+Jackpot\s+€\s*([0-9]+(?:[\.,][0-9]+)?)\s*(Million|Billion|Milioni|Miliardi)?",
+        compact,
+        re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError("Jackpot stimato non trovato nella fonte pubblica.")
+
+    amount = match.group(1).replace(",", ".")
+    unit = match.group(2) or "Million"
+    unit_map = {
+        "million": "milioni",
+        "milioni": "milioni",
+        "billion": "miliardi",
+        "miliardi": "miliardi",
+    }
+    unit_it = unit_map.get(unit.lower(), unit)
+
+    return {
+        "ok": True,
+        "value": f"€{amount}",
+        "unit": unit_it,
+        "display": f"€{amount} {unit_it}",
+        "source": "superenalotto.net",
+    }
 
 
 def refresh_history():
@@ -590,6 +636,18 @@ def build_dashboard_data():
     best_line = choose_best_line(suggested_lines)
     quality = build_quality_report(df, refresh)
 
+    try:
+        jackpot = fetch_estimated_jackpot()
+    except Exception as exc:
+        jackpot = {
+            "ok": False,
+            "value": "-",
+            "unit": "",
+            "display": "Non disponibile",
+            "source": "fallback",
+            "message": str(exc),
+        }
+
     return {
         "date": latest["draw_date"].strftime("%Y-%m-%d"),
         "numbers": numbers,
@@ -611,4 +669,5 @@ def build_dashboard_data():
         "draws_added": refresh["draws_added"],
         "official_rows": refresh.get("official_rows", 0),
         "quality": quality,
+        "jackpot": jackpot,
     }
