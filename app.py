@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template, request
 import traceback
 import superenalotto_live_dashboard as superenalotto
 
@@ -62,7 +62,10 @@ def home():
 @app.route("/superenalotto")
 def superenalotto_dashboard():
     try:
-        data = superenalotto.build_dashboard_data()
+        line_count = request.args.get("lines", default=5, type=int)
+        if line_count not in [1, 3, 5, 10]:
+            line_count = 5
+        data = superenalotto.build_dashboard_data(line_count=line_count)
 
         if not data:
             return "Nessun dato disponibile"
@@ -79,6 +82,37 @@ def superenalotto_dashboard():
         </body>
         </html>
         """, 500
+
+
+@app.route("/api/odds")
+def api_odds():
+    line_count = request.args.get("lines", default=5, type=int)
+    if line_count not in [1, 3, 5, 10]:
+        line_count = 5
+    return jsonify({
+        "odds": superenalotto.pack_jackpot_probability(line_count),
+        "strategy": superenalotto.budget_strategy(line_count),
+    })
+
+
+@app.route("/api/suggested")
+def api_suggested():
+    try:
+        line_count = request.args.get("lines", default=5, type=int)
+        if line_count not in [1, 3, 5, 10]:
+            line_count = 5
+        data = superenalotto.build_dashboard_data(line_count=line_count)
+        return jsonify({
+            "ok": True,
+            "odds": data["odds"],
+            "best_line": data["best_line"],
+            "suggested": data["suggested_lines"],
+            "quality": data["quality"],
+            "strategy": data["strategy"],
+            "diversity": data["diversity"],
+        })
+    except Exception:
+        return jsonify({"ok": False, "error": traceback.format_exc()}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

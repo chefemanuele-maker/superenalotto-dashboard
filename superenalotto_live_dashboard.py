@@ -1,7 +1,8 @@
 import pandas as pd
 import os
 from collections import Counter
-import random
+import secrets
+import math
 import requests
 import re
 from bs4 import BeautifulSoup
@@ -9,6 +10,21 @@ from datetime import datetime, date
 
 DATA_FILE = os.path.join("data", "superenalotto_history.csv")
 NUMBER_RANGE = list(range(1, 91))
+LINE_COST_EUR_WITH_SUPERSTAR = 1.50
+
+# Exact SuperEnalotto jackpot combinatorics: choose 6 numbers from 90.
+# SuperStar is a separate 1-from-90 add-on number.
+TOTAL_COMBINATIONS = math.comb(90, 6)
+TOTAL_COMBINATIONS_WITH_SUPERSTAR = TOTAL_COMBINATIONS * 90
+
+SUPERENALOTTO_PRIZE_TIERS = [
+    {"match": "6", "ways": 1, "note": "jackpot"},
+    {"match": "5 + Jolly", "ways": math.comb(6, 5), "note": "five main numbers plus Jolly"},
+    {"match": "5", "ways": math.comb(6, 5) * 83, "note": "five main numbers, not Jolly"},
+    {"match": "4", "ways": math.comb(6, 4) * math.comb(84, 2), "note": "standard prize tier"},
+    {"match": "3", "ways": math.comb(6, 3) * math.comb(84, 3), "note": "standard prize tier"},
+    {"match": "2", "ways": math.comb(6, 2) * math.comb(84, 4), "note": "standard prize tier"},
+]
 
 OFFICIAL_ARCHIVE_URL = "https://www.superenalotto.it/archivio-estrazioni"
 JACKPOT_INFO_URL = "https://www.superenalotto.net/en/"
@@ -480,139 +496,271 @@ def build_quality_report(df, refresh):
     }
 
 
-def line_score(numbers, score_lookup, preferred_odd_even, preferred_low_high):
-    base_score = sum(score_lookup.get(n, 0) for n in numbers)
-
-    odd = sum(1 for n in numbers if n % 2 != 0)
-    even = 6 - odd
-    low = sum(1 for n in numbers if n <= 45)
-    high = 6 - low
-
-    odd_even_pattern = f"{odd}-{even}"
-    low_high_pattern = f"{low}-{high}"
-
-    pattern_bonus = 0
-    if odd_even_pattern in preferred_odd_even[:2]:
-        pattern_bonus += 12
-    elif odd_even_pattern in preferred_odd_even[:4]:
-        pattern_bonus += 6
-
-    if low_high_pattern in preferred_low_high[:2]:
-        pattern_bonus += 12
-    elif low_high_pattern in preferred_low_high[:4]:
-        pattern_bonus += 6
-
-    total_sum = sum(numbers)
-    if 180 <= total_sum <= 320:
-        sum_bonus = 12
-    elif 150 <= total_sum <= 350:
-        sum_bonus = 6
-    else:
-        sum_bonus = 0
-
-    consecutive_pairs = 0
-    sorted_nums = sorted(numbers)
-    for a, b in zip(sorted_nums, sorted_nums[1:]):
-        if b == a + 1:
-            consecutive_pairs += 1
-
-    consecutive_penalty = consecutive_pairs * 4
-    same_last_digit_penalty = (len(numbers) - len(set(n % 10 for n in numbers))) * 2
-
-    return round(base_score + pattern_bonus + sum_bonus - consecutive_penalty - same_last_digit_penalty, 2)
+def eur(value):
+    return f"€{value:,.2f}"
 
 
-def generate_single_line(pool, score_lookup, preferred_odd_even, preferred_low_high, rng):
-    tries = 0
+def prize_tier_probability(ways):
+    return ways / TOTAL_COMBINATIONS
 
-    while tries < 500:
-        tries += 1
-        picked = sorted(rng.sample(pool, 6))
 
-        odd = sum(1 for n in picked if n % 2 != 0)
-        low = sum(1 for n in picked if n <= 45)
+def exact_any_prize_probability():
+    return sum(tier["ways"] for tier in SUPERENALOTTO_PRIZE_TIERS) / TOTAL_COMBINATIONS
 
-        if odd < 1 or odd > 5:
-            continue
 
-        if low < 1 or low > 5:
-            continue
+def pack_jackpot_probability(line_count=5):
+    line_count = max(1, int(line_count))
+    jackpot_p = 1.0 - ((TOTAL_COMBINATIONS - 1) / TOTAL_COMBINATIONS) ** line_count
+    superstar_jackpot_p = 1.0 - ((TOTAL_COMBINATIONS_WITH_SUPERSTAR - 1) / TOTAL_COMBINATIONS_WITH_SUPERSTAR) ** line_count
+    any_prize_single_p = exact_any_prize_probability()
+    any_prize_pack_p = 1.0 - ((1.0 - any_prize_single_p) ** line_count)
+    cost = LINE_COST_EUR_WITH_SUPERSTAR * line_count
 
-        return {
-            "numbers": picked,
-            "score": line_score(picked, score_lookup, preferred_odd_even, preferred_low_high)
-        }
+    tiers = []
+    for tier in SUPERENALOTTO_PRIZE_TIERS:
+        odds = TOTAL_COMBINATIONS / tier["ways"]
+        tiers.append({
+            **tier,
+            "odds": round(odds),
+            "odds_text": f"1 in {round(odds):,}",
+            "probability_pct": round((tier["ways"] / TOTAL_COMBINATIONS) * 100, 9),
+        })
 
-    fallback = sorted(rng.sample(pool, 6))
     return {
-        "numbers": fallback,
-        "score": line_score(fallback, score_lookup, preferred_odd_even, preferred_low_high)
+        "lines": line_count,
+        "total_combinations": f"{TOTAL_COMBINATIONS:,}",
+        "total_combinations_with_superstar": f"{TOTAL_COMBINATIONS_WITH_SUPERSTAR:,}",
+        "jackpot_odds_text": f"1 in {TOTAL_COMBINATIONS:,}" if line_count == 1 else f"about 1 in {round(1 / jackpot_p):,}",
+        "jackpot_probability_pct": round(jackpot_p * 100, 9),
+        "jackpot_superstar_odds_text": f"1 in {TOTAL_COMBINATIONS_WITH_SUPERSTAR:,}" if line_count == 1 else f"about 1 in {round(1 / superstar_jackpot_p):,}",
+        "jackpot_superstar_probability_pct": round(superstar_jackpot_p * 100, 12),
+        "any_prize_single_line_odds_text": f"about 1 in {round(1 / any_prize_single_p, 2)} per line",
+        "any_prize_pack_odds_text": f"about 1 in {round(1 / any_prize_pack_p, 2)} for this pack",
+        "any_prize_probability_pct": round(any_prize_pack_p * 100, 6),
+        "estimated_cost_eur": round(cost, 2),
+        "estimated_cost_text": eur(cost),
+        "tiers": tiers,
+        "truth": "Ogni combinazione valida ha la stessa probabilità di fare 6: il motore migliora qualità dati, copertura, diversificazione e rischio di condividere premi, non predice il futuro.",
     }
 
 
-def generate_suggested_lines(df):
+def budget_strategy(line_count=5):
+    line_count = max(1, int(line_count))
+    cost = line_count * LINE_COST_EUR_WITH_SUPERSTAR
+    return {
+        "selected_lines": line_count,
+        "cost_per_draw_eur": round(cost, 2),
+        "cost_per_draw_text": eur(cost),
+        "monthly_if_three_draws_per_week_eur": round(cost * 13.0, 2),
+        "monthly_if_three_draws_per_week_text": eur(cost * 13.0),
+        "best_practice": [
+            "Imposta un budget mensile fisso prima di giocare.",
+            "Meglio 3-5 linee ben diversificate che tante linee simili.",
+            "Non aumentare la spesa dopo le perdite: ogni estrazione è indipendente.",
+            "Se giochi in gruppo, scrivi prima le quote di divisione.",
+        ],
+    }
+
+
+def weighted_sample_without_replacement(population, weights, k, rng):
+    items = list(population)
+    w = list(weights)
+    chosen = []
+    for _ in range(min(k, len(items))):
+        total = sum(max(x, 0.00001) for x in w)
+        pick = rng.random() * total
+        upto = 0.0
+        idx = 0
+        for i, weight in enumerate(w):
+            upto += max(weight, 0.00001)
+            if upto >= pick:
+                idx = i
+                break
+        chosen.append(items.pop(idx))
+        w.pop(idx)
+    return chosen
+
+
+def popularity_risk_score(numbers):
+    """Estimate how likely a line is to be shared with many human players."""
+    numbers = sorted(int(x) for x in numbers)
+    risk = 0.0
+    birthday_count = sum(1 for n in numbers if n <= 31)
+    if birthday_count >= 4:
+        risk += 18 + (birthday_count - 4) * 9
+    if max(numbers) <= 31:
+        risk += 30
+    if sum(numbers) < 175:
+        risk += 16
+    if sum(numbers) > 400:
+        risk += 7
+
+    consecutive_pairs = sum(1 for a, b in zip(numbers, numbers[1:]) if b == a + 1)
+    risk += consecutive_pairs * 12
+    gaps = [b - a for a, b in zip(numbers, numbers[1:])]
+    if gaps and len(set(gaps)) == 1:
+        risk += 36
+    if numbers in ([1, 2, 3, 4, 5, 6], [5, 10, 15, 20, 25, 30], [10, 20, 30, 40, 50, 60]):
+        risk += 50
+
+    decade_max = max(sum(1 for n in numbers if lo <= n <= lo + 9) for lo in range(1, 91, 10))
+    if decade_max >= 4:
+        risk += 14
+    same_last_digit = len(numbers) - len(set(n % 10 for n in numbers))
+    risk += same_last_digit * 5
+    return round(min(100.0, risk), 3)
+
+
+def statistical_shape_score(numbers, hist_sum_mean, hist_sum_std):
+    numbers = sorted(int(x) for x in numbers)
+    odd = sum(n % 2 for n in numbers)
+    low = sum(n <= 45 for n in numbers)
+    total_sum = sum(numbers)
+    z = abs((total_sum - hist_sum_mean) / hist_sum_std) if hist_sum_std else 0.0
+    sum_score = max(0.0, 34.0 - (z * 9.0))
+    balance_score = 26.0 - (abs(odd - 3.0) * 4.5) - (abs(low - 3.0) * 4.5)
+    spread = max(numbers) - min(numbers)
+    spread_score = 22.0 if 45 <= spread <= 86 else 13.0 if spread >= 34 else 4.0
+    return round(max(0.0, sum_score + balance_score + spread_score), 3)
+
+
+def history_signal_score(numbers, score_lookup):
+    raw = sum(score_lookup.get(int(n), 0.0) for n in numbers)
+    # History is weak in a fair lottery, so cap its influence.
+    return round(min(45.0, raw / 10.0), 3)
+
+
+def ticket_quality_score(numbers, score_lookup, hist_sum_mean, hist_sum_std, mode):
+    shape = statistical_shape_score(numbers, hist_sum_mean, hist_sum_std)
+    history = history_signal_score(numbers, score_lookup)
+    popularity_risk = popularity_risk_score(numbers)
+    value_score = max(0.0, 100.0 - popularity_risk)
+
+    if mode == "value":
+        total = (shape * 0.42) + (value_score * 0.48) + (history * 0.10)
+    elif mode == "balanced":
+        total = (shape * 0.45) + (value_score * 0.30) + (history * 0.25)
+    elif mode == "anti_last_draw":
+        total = (shape * 0.50) + (value_score * 0.38) + (history * 0.12)
+    else:
+        total = (shape * 0.55) + (value_score * 0.35) + (history * 0.10)
+    return round(total, 3), round(value_score, 3), round(shape, 3), round(history, 3), popularity_risk
+
+
+def generate_suggested_lines(df, total_lines=5):
     scores = build_number_scores(df)
     score_lookup = {item["number"]: item["score"] for item in scores}
-
-    odd_even_top, low_high_top = build_pattern_stats(df)
-    preferred_odd_even = [item["pattern"] for item in odd_even_top]
-    preferred_low_high = [item["pattern"] for item in low_high_top]
-
     ranked_numbers = [item["number"] for item in scores]
-
-    rng = random.Random(42)
+    weights = {item["number"]: float(item["score"]) for item in scores}
+    rng = secrets.SystemRandom()
+    hist_sums = [sum(extract_main_numbers(row)) for _, row in df.iterrows()]
+    hist_sum_mean = sum(hist_sums) / len(hist_sums) if hist_sums else 273.0
+    hist_sum_std = pd.Series(hist_sums).std(ddof=0) or 1.0
+    last_numbers = set(extract_main_numbers(df.iloc[0]))
 
     modes = {
-        "safe": ranked_numbers[:18],
-        "balanced": ranked_numbers[:30],
-        "aggressive": ranked_numbers[:45]
+        "value": {"jitter": 0.90, "history_weight": 0.14},
+        "balanced": {"jitter": 0.50, "history_weight": 0.45},
+        "coverage": {"jitter": 1.15, "history_weight": 0.05},
+        "anti_last_draw": {"jitter": 0.65, "history_weight": 0.18},
     }
-
-    all_lines = []
+    per_mode = max(3, total_lines)
+    rows = []
     used = set()
 
-    for mode, pool in modes.items():
-        created = 0
+    for mode, cfg in modes.items():
+        candidates = []
         attempts = 0
-
-        while created < 3 and attempts < 500:
+        while attempts < 5000:
             attempts += 1
-            line = generate_single_line(pool, score_lookup, preferred_odd_even, preferred_low_high, rng)
-            key = tuple(line["numbers"])
-
+            pool = ranked_numbers
+            sample_weights = [max(0.001, (1.0 + weights[n] * cfg["history_weight"]) * (1.0 + rng.uniform(-cfg["jitter"], cfg["jitter"]))) for n in pool]
+            numbers = sorted(weighted_sample_without_replacement(pool, sample_weights, 6, rng))
+            key = tuple(numbers)
             if key in used:
                 continue
+            if mode == "anti_last_draw" and len(set(numbers) & last_numbers) > 1:
+                continue
 
-            used.add(key)
-            created += 1
+            odd = sum(n % 2 for n in numbers)
+            low = sum(n <= 45 for n in numbers)
+            if odd not in {2, 3, 4} or low not in {2, 3, 4}:
+                continue
 
-            all_lines.append({
-                "name": f"{mode.title()} {created}",
+            score, value_score, shape_score, history_score, risk = ticket_quality_score(
+                numbers, score_lookup, hist_sum_mean, hist_sum_std, mode
+            )
+            candidates.append({
+                "name": f"{mode.replace('_', ' ').title()}",
                 "mode": mode,
-                "numbers": line["numbers"],
-                "score": line["score"]
+                "numbers": numbers,
+                "sum": sum(numbers),
+                "odd_even": f"{odd}-{6 - odd}",
+                "low_high": f"{low}-{6 - low}",
+                "score": score,
+                "value_score": value_score,
+                "shape_score": shape_score,
+                "history_signal": history_score,
+                "popularity_risk": risk,
             })
+            used.add(key)
 
-    all_lines = sorted(all_lines, key=lambda x: x["score"], reverse=True)
-    return all_lines
+        rows.extend(sorted(candidates, key=lambda x: x["score"], reverse=True)[:per_mode])
+
+    selected = []
+    used_sets = []
+    for mode in ["value", "balanced", "coverage", "anti_last_draw"]:
+        for row in sorted([r for r in rows if r["mode"] == mode], key=lambda x: x["score"], reverse=True):
+            if all(len(set(row["numbers"]) & prev) < 3 for prev in used_sets):
+                selected.append(row)
+                used_sets.append(set(row["numbers"]))
+                break
+        if len(selected) >= total_lines:
+            break
+
+    if len(selected) < total_lines:
+        for row in sorted(rows, key=lambda x: x["score"], reverse=True):
+            if row not in selected and all(len(set(row["numbers"]) & prev) < 4 for prev in used_sets):
+                selected.append(row)
+                used_sets.append(set(row["numbers"]))
+            if len(selected) >= total_lines:
+                break
+
+    for idx, row in enumerate(selected, 1):
+        row["name"] = f"Pack {idx} · {row['mode'].replace('_', ' ').title()}"
+    return selected
+
+
+def line_pack_diversity_report(lines):
+    if not lines:
+        return {"ok": False, "message": "Nessuna linea suggerita disponibile."}
+    sets = [set(line["numbers"]) for line in lines]
+    overlaps = [len(sets[i] & sets[j]) for i in range(len(sets)) for j in range(i + 1, len(sets))]
+    unique_numbers = sorted(set().union(*sets)) if sets else []
+    max_overlap = max(overlaps) if overlaps else 0
+    avg_overlap = round(sum(overlaps) / len(overlaps), 2) if overlaps else 0.0
+    return {
+        "ok": max_overlap <= 2,
+        "unique_main_numbers": len(unique_numbers),
+        "max_pair_overlap": max_overlap,
+        "average_pair_overlap": avg_overlap,
+        "message": "Buona diversificazione del pacchetto." if max_overlap <= 2 else "Alcune linee si sovrappongono: meglio diversificare di più.",
+    }
 
 
 def choose_best_line(lines):
     if not lines:
         return None
-
-    balanced = [line for line in lines if line["mode"] == "balanced"]
-    safe = [line for line in lines if line["mode"] == "safe"]
-    aggressive = [line for line in lines if line["mode"] == "aggressive"]
-
-    if balanced:
-        return sorted(balanced, key=lambda x: x["score"], reverse=True)[0]
-    if safe:
-        return sorted(safe, key=lambda x: x["score"], reverse=True)[0]
-    return sorted(aggressive, key=lambda x: x["score"], reverse=True)[0]
+    for mode in ["value", "balanced", "coverage", "anti_last_draw"]:
+        mode_rows = [line for line in lines if line["mode"] == mode]
+        if mode_rows:
+            best = sorted(mode_rows, key=lambda x: x["score"], reverse=True)[0]
+            best["reason"] = "Scelta per equilibrio tra forma statistica, diversificazione e minor rischio di dividere premi con giocate umane comuni."
+            return best
+    return sorted(lines, key=lambda x: x["score"], reverse=True)[0]
 
 
-def build_dashboard_data():
+def build_dashboard_data(line_count=5):
     df, refresh = refresh_history()
 
     if df.empty:
@@ -632,9 +780,12 @@ def build_dashboard_data():
     best_superstar = choose_best_superstar(df)
 
     odd_even_top, low_high_top = build_pattern_stats(df)
-    suggested_lines = generate_suggested_lines(df)
+    suggested_lines = generate_suggested_lines(df, total_lines=line_count)
     best_line = choose_best_line(suggested_lines)
     quality = build_quality_report(df, refresh)
+    odds = pack_jackpot_probability(line_count)
+    strategy = budget_strategy(line_count)
+    diversity = line_pack_diversity_report(suggested_lines)
 
     try:
         jackpot = fetch_estimated_jackpot()
@@ -670,4 +821,8 @@ def build_dashboard_data():
         "official_rows": refresh.get("official_rows", 0),
         "quality": quality,
         "jackpot": jackpot,
+        "odds": odds,
+        "strategy": strategy,
+        "diversity": diversity,
+        "line_count": line_count,
     }

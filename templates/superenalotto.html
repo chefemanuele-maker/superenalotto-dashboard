@@ -143,6 +143,7 @@
         .mode-safe { background:rgba(11,207,122,.14); color:#8dffd0; }
         .mode-balanced { background:rgba(0,216,255,.14); color:#9befff; }
         .mode-aggressive { background:rgba(255,56,100,.14); color:#ff9ab0; }
+        .mode-anti { background:rgba(255,43,214,.14); color:#ffabef; }
         .alert { margin-top:14px; border-radius:17px; padding:12px 14px; line-height:1.45; }
         .alert.ok { border:1px solid rgba(11,207,122,.32); background:rgba(11,207,122,.09); color:#c8ffea; }
         .alert.warn { border:1px solid rgba(255,213,74,.42); background:rgba(255,213,74,.11); color:#ffeaa0; }
@@ -195,11 +196,13 @@
                     <div class="score-box"><span class="label">Nome:</span> {{ best_line.name }}</div>
                     <div class="score-box"><span class="label">Score:</span> {{ best_line.score }}</div>
                     <div class="score-box"><span class="label">Modalità:</span>
-                        {% if best_line.mode == "safe" %}<span class="mode-badge mode-safe">SAFE</span>
+                        {% if best_line.mode == "value" %}<span class="mode-badge mode-safe">VALUE</span>
                         {% elif best_line.mode == "balanced" %}<span class="mode-badge mode-balanced">BALANCED</span>
-                        {% else %}<span class="mode-badge mode-aggressive">AGGRESSIVE</span>{% endif %}
+                        {% elif best_line.mode == "coverage" %}<span class="mode-badge mode-aggressive">COVERAGE</span>
+                        {% else %}<span class="mode-badge mode-anti">ANTI LAST DRAW</span>{% endif %}
                     </div>
-                    <div class="note">Scelta con priorità alle linee balanced, poi safe, poi aggressive. Serve per organizzare la giocata, non per prevedere il risultato.</div>
+                    <div class="score-box"><span class="label">Value:</span> {{ best_line.value_score }} · <span class="label">Share risk:</span> {{ best_line.popularity_risk }}</div>
+                    <div class="note">{{ best_line.reason }}</div>
                 </div>
                 {% endif %}
             </div>
@@ -231,16 +234,44 @@
         <div class="grid three-grid">
             <div class="small-card"><h3>Pattern Odd / Even</h3><table><thead><tr><th>Pattern</th><th>Count</th></tr></thead><tbody>{% for item in odd_even_top %}<tr><td>{{ item.pattern }}</td><td>{{ item.count }}</td></tr>{% endfor %}</tbody></table></div>
             <div class="small-card"><h3>Pattern Low / High</h3><table><thead><tr><th>Pattern</th><th>Count</th></tr></thead><tbody>{% for item in low_high_top %}<tr><td>{{ item.pattern }}</td><td>{{ item.count }}</td></tr>{% endfor %}</tbody></table></div>
-            <div class="small-card"><h3>Riassunto motore</h3><div class="note"><p><span class="label">Base:</span> frequenza + ritardo normalizzati.</p><p><span class="label">Bonus:</span> pattern storici comuni e somma equilibrata.</p><p><span class="label">Penalità:</span> consecutivi e troppe cifre finali uguali.</p></div></div>
+            <div class="small-card"><h3>Riassunto motore</h3><div class="note"><p><span class="label">Base:</span> forma statistica + storico leggero.</p><p><span class="label">Value:</span> evita pattern troppo comuni tra umani.</p><p><span class="label">Copertura:</span> linee meno sovrapposte tra loro.</p></div></div>
+        </div>
+
+        <div class="grid three-grid">
+            <div class="small-card">
+                <h3>Probabilità esatte</h3>
+                <div class="note">
+                    <p><span class="label">6:</span> {{ odds.jackpot_odds_text }}</p>
+                    <p><span class="label">6 + SuperStar:</span> {{ odds.jackpot_superstar_odds_text }}</p>
+                    <p><span class="label">Qualsiasi premio pack:</span> {{ odds.any_prize_pack_odds_text }}</p>
+                    <p><span class="label">Combinazioni:</span> {{ odds.total_combinations }}</p>
+                </div>
+            </div>
+            <div class="small-card">
+                <h3>Budget strategy</h3>
+                <div class="note">
+                    <p><span class="label">Linee:</span> {{ strategy.selected_lines }}</p>
+                    <p><span class="label">Costo stimato:</span> {{ strategy.cost_per_draw_text }}</p>
+                    <p><span class="label">Mese, 3 draw/settimana:</span> {{ strategy.monthly_if_three_draws_per_week_text }}</p>
+                </div>
+            </div>
+            <div class="small-card">
+                <h3>Diversificazione pack</h3>
+                <div class="note">
+                    <p><span class="label">Numeri unici:</span> {{ diversity.unique_main_numbers }}</p>
+                    <p><span class="label">Max overlap:</span> {{ diversity.max_pair_overlap }}</p>
+                    <p>{{ diversity.message }}</p>
+                </div>
+            </div>
         </div>
 
         <div class="card" style="margin-top:18px;">
             <h2>Linee suggerite</h2>
-            <table><thead><tr><th>Linea</th><th>Modalità</th><th>Numeri</th><th>Score</th></tr></thead><tbody>{% for line in suggested_lines %}<tr><td>{{ line.name }}</td><td>{{ line.mode }}</td><td>{{ line.numbers|join(', ') }}</td><td>{{ line.score }}</td></tr>{% endfor %}</tbody></table>
+            <table><thead><tr><th>Linea</th><th>Modalità</th><th>Numeri</th><th>Somma</th><th>Value</th><th>Share risk</th><th>Score</th></tr></thead><tbody>{% for line in suggested_lines %}<tr><td>{{ line.name }}</td><td>{{ line.mode }}</td><td>{{ line.numbers|join(', ') }}</td><td>{{ line.sum }}</td><td>{{ line.value_score }}</td><td>{{ line.popularity_risk }}</td><td>{{ line.score }}</td></tr>{% endfor %}</tbody></table>
         </div>
 
         <div class="card footer">
-            <strong>Responsible play:</strong> questa dashboard aiuta ad analizzare e organizzare le giocate, ma il SuperEnalotto è casuale. Non può prevedere il 6 né migliorare matematicamente la probabilità di jackpot.
+            <strong>Responsible play:</strong> {{ odds.truth }} Gioca solo con budget fisso e sostenibile.
         </div>
     </div>
 </body>
